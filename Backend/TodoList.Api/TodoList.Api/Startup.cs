@@ -5,6 +5,7 @@ using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.OpenApi.Models;
+using TodoList.Api.Services;
 
 namespace TodoList.Api
 {
@@ -31,6 +32,7 @@ namespace TodoList.Api
                       });
             });
 
+            services.AddScoped<ITodoItemService, TodoItemService>();
             services.AddControllers();
             services.AddSwaggerGen(c =>
             {

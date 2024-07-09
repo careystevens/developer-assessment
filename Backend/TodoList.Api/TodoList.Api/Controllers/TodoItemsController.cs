@@ -4,6 +4,7 @@ using Microsoft.Extensions.Logging;
 using System;
 using System.Linq;
 using System.Threading.Tasks;
+using TodoList.Api.Services;
 
 namespace TodoList.Api.Controllers
 {
@@ -11,35 +12,51 @@ namespace TodoList.Api.Controllers
     [ApiController]
     public class TodoItemsController : ControllerBase
     {
-        private readonly TodoContext _context;
         private readonly ILogger<TodoItemsController> _logger;
 
-        public TodoItemsController(TodoContext context, ILogger<TodoItemsController> logger)
+        private readonly ITodoItemService _todoItemService;
+
+
+        public TodoItemsController(ILogger<TodoItemsController> logger, ITodoItemService todoItemService)
         {
-            _context = context;
             _logger = logger;
+            _todoItemService = todoItemService;
         }
 
         // GET: api/TodoItems
         [HttpGet]
         public async Task<IActionResult> GetTodoItems()
         {
-            var results = await _context.TodoItems.Where(x => !x.IsCompleted).ToListAsync();
-            return Ok(results);
+            try
+            {
+                var results = await _todoItemService.GetAllTodoItems();
+                return Ok(results);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error: GetTodoItems() failed");
+                return StatusCode(500, "An error occurred.");
+            }
         }
 
         // GET: api/TodoItems/...
         [HttpGet("{id}")]
         public async Task<IActionResult> GetTodoItem(Guid id)
         {
-            var result = await _context.TodoItems.FindAsync(id);
-
-            if (result == null)
+            try
             {
-                return NotFound();
+                var result = await _todoItemService.GetTodoItem(id);
+                if (result == null)
+                {
+                    return NotFound($"Todo item {id} not found.");
+                }
+                return Ok(result);
             }
-
-            return Ok(result);
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error: GetTodoItem() failed to retrieve {Id}", id);
+                return StatusCode(500, "An error occurred.");
+            }
         }
 
         // PUT: api/TodoItems/... 
@@ -48,25 +65,27 @@ namespace TodoList.Api.Controllers
         {
             if (id != todoItem.Id)
             {
-                return BadRequest();
+                return BadRequest("ID mismatch in the request.");
             }
 
-            _context.Entry(todoItem).State = EntityState.Modified;
-
-            try
+            var existingTodoItem = await _todoItemService.GetTodoItem(id);
+            if (existingTodoItem != null)
             {
-                await _context.SaveChangesAsync();
+                try
+                {
+                    existingTodoItem.Description = todoItem.Description;
+                    existingTodoItem.IsCompleted = todoItem.IsCompleted;
+                    await _todoItemService.UpdateTodoItem(id, existingTodoItem);
+                }
+                catch (DbUpdateConcurrencyException ex)
+                {
+                    _logger.LogError(ex, "Error: PutTodoItem() failed for {Id}", id);
+                    return StatusCode(500, "An error occurred.");
+                }
             }
-            catch (DbUpdateConcurrencyException)
+            else
             {
-                if (!TodoItemIdExists(id))
-                {
-                    return NotFound();
-                }
-                else
-                {
-                    throw;
-                }
+                return NotFound($"Todo item {id} not found.");
             }
 
             return NoContent();
@@ -80,26 +99,31 @@ namespace TodoList.Api.Controllers
             {
                 return BadRequest("Description is required");
             }
-            else if (TodoItemDescriptionExists(todoItem.Description))
+            else if (await TodoItemDescriptionExists(todoItem.Description))
             {
                 return BadRequest("Description already exists");
-            } 
+            }
 
-            _context.TodoItems.Add(todoItem);
-            await _context.SaveChangesAsync();
-             
-            return CreatedAtAction(nameof(GetTodoItem), new { id = todoItem.Id }, todoItem);
+            try
+            {
+                var newItem = await _todoItemService.AddTodoItem(todoItem);
+                return CreatedAtAction(nameof(GetTodoItem), new { id = newItem.Id }, newItem);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error: PostTodoItem() failed.");
+                return StatusCode(500, "An error occurred.");
+            }
         } 
 
-        private bool TodoItemIdExists(Guid id)
+        private async Task<bool> TodoItemIdExists(Guid id)
         {
-            return _context.TodoItems.Any(x => x.Id == id);
+            return await _todoItemService.TodoItemIdExists(id);
         }
 
-        private bool TodoItemDescriptionExists(string description)
+        private async Task<bool> TodoItemDescriptionExists(string description)
         {
-            return _context.TodoItems
-                   .Any(x => x.Description.ToLowerInvariant() == description.ToLowerInvariant() && !x.IsCompleted);
+            return await _todoItemService.TodoItemDescriptionExists(description);
         }
     }
 }

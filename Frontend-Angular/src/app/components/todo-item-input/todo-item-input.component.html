@@ -1,0 +1,40 @@
+<h1>Add Item</h1>
+
+<!-- Use new angular flow blocks rather than ng* directives. More readable, performance improvements -->
+@if ( errorMessage() ) {
+  <div class="error-message"> {{ errorMessage() }} </div>
+}
+
+<!-- Use angular reactive forms, more ergonimic to work with, validators etc -->
+<form [formGroup]="todoItemForm" class="" (ngSubmit)="handleAdd()">
+  <div class="mb-3 row">
+    <label
+      class="form-label col-form-label col-sm-2"
+      >Description</label
+    >
+    <div class="col-md-6">
+      <input
+        placeholder="Enter description..."
+        type="text"
+        class="form-control"
+        required
+        formControlName="description"
+      />
+    </div>
+  </div>
+  <div class="mb-3 offset-md-2 row">
+    <div class="hstack gap-2">
+      <button class="btn btn-primary" type="submit" [disabled]="!todoItemForm.valid">
+        Add Item
+      </button>
+      <button
+        type="button"
+        class="btn btn-secondary"
+        (click)="handleClear()"
+        [disabled]="!todoItemForm.valid"
+      >
+        Clear
+      </button>
+    </div>
+  </div>
+</form>
